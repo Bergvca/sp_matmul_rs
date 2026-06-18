@@ -1,0 +1,45 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "sp_matmul_rs"
+description = "Sparse CSR x CSR matrix multiplication with fused top-n selection (Rust)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Chris van den Berg" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+  "numpy>=1.18.0",
+  "scipy>=1.4.1",
+  "psutil",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = ["pytest>=4.0.2"]
+
+[project.urls]
+Homepage = "https://github.com/bergvca/sp_matmul_rs"
+Repository = "https://github.com/bergvca/sp_matmul_rs"
+Issues = "https://github.com/bergvca/sp_matmul_rs/issues"
+Changelog = "https://github.com/bergvca/sp_matmul_rs/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+features = ["python", "rayon"]
+module-name = "sp_matmul_rs._core"
+python-source = "python"
+manifest-path = "Cargo.toml"

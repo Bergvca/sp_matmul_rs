@@ -1,0 +1,51 @@
+[package]
+name         = "sp_matmul_rs"
+version      = "0.1.0"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "Sparse CSR matrix multiplication with top-n selection — Rust port of sparse_dot_topn."
+authors      = ["Chris van den Berg"]
+repository   = "https://github.com/bergvca/sp_matmul_rs"
+homepage     = "https://github.com/bergvca/sp_matmul_rs"
+documentation = "https://docs.rs/sp_matmul_rs"
+readme       = "README.md"
+keywords     = ["sparse", "matrix", "topn", "csr", "matmul"]
+categories   = ["mathematics", "science"]
+exclude      = [
+    ".github/*",
+    ".idea/*",
+    "target/*",
+    "tests/data/*",
+    "**/__pycache__/*",
+    "python/sp_matmul_rs/_core.*.so",
+    "python/sp_matmul_rs/_core.*.pyd",
+]
+
+[lib]
+# PyO3 needs cdylib; rlib keeps it usable as a Rust dependency.
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["rayon"]
+rayon  = ["dep:rayon"]
+python = ["dep:pyo3", "dep:numpy"]
+
+[dependencies]
+num-traits = "0.2"
+thiserror  = "1"
+cache-size = "0.7"
+rayon      = { version = "1", optional = true }
+pyo3       = { version = "0.26", optional = true, features = ["extension-module", "generate-import-lib"] }
+numpy      = { version = "0.26", optional = true }
+
+[dev-dependencies]
+proptest  = "1"
+criterion = "0.5"
+approx    = "0.5"
+npyz      = { version = "0.8", features = ["npz"] }
+paste     = "1"
+
+[[bench]]
+name    = "tfidf_like"
+harness = false
