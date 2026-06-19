@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 //! Phase timing of the production *tiled+blocked* kernel on the real
 //! string_grouper TF-IDF dumps (B5 go/no-go: how much of the kernel is the
 //! linked-list drain now that O2+O3 are the default?).
@@ -343,17 +344,26 @@ fn main() {
 
     let b = load("B", usize::MAX);
     let a = load("A", b.nrows);
-    let b = CsrMatrix { ncols: a.nrows, ..b };
+    let b = CsrMatrix {
+        ncols: a.nrows,
+        ..b
+    };
     println!(
         "A {}x{} nnz {} | B {}x{} nnz {}",
-        a.nrows, a.ncols, a.indptr.last().unwrap(),
-        b.nrows, b.ncols, b.indptr.last().unwrap()
+        a.nrows,
+        a.ncols,
+        a.indptr.last().unwrap(),
+        b.nrows,
+        b.ncols,
+        b.indptr.last().unwrap()
     );
 
     let ncols = b.ncols;
     let chunk_cols = default_chunk_cols::<f64>().min(ncols);
     let n_chunks = ncols.div_ceil(chunk_cols);
-    println!("chunk_cols={chunk_cols} n_chunks={n_chunks} row_block={rb} timer_sample=1/{timer_sample}");
+    println!(
+        "chunk_cols={chunk_cols} n_chunks={n_chunks} row_block={rb} timer_sample=1/{timer_sample}"
+    );
 
     let a_sub = sample_rows(&a, frac, spans);
 
@@ -379,7 +389,10 @@ fn main() {
 
     let t0 = Instant::now();
     let tiled = TiledB::<f64>::build(view(&b), chunk_cols);
-    println!("TiledB::build: {:.1} ms\n", t0.elapsed().as_secs_f64() * 1e3);
+    println!(
+        "TiledB::build: {:.1} ms\n",
+        t0.elapsed().as_secs_f64() * 1e3
+    );
 
     // Productiereferentie (zelfde sample, geforceerd tiled+blocked): timer-vrije
     // ground truth + bit-for-bit-doel voor de mirror.
@@ -404,10 +417,27 @@ fn main() {
     let prod = prod_out.unwrap();
     println!("productie tiled+blocked (timer-vrij): {prod_ms:.1} ms (mediaan van {runs})\n");
 
-    let _ = kernel_timed(&a_sub, &b, &tiled, top_n, threshold, chunk_cols, rb, timer_sample);
+    let _ = kernel_timed(
+        &a_sub,
+        &b,
+        &tiled,
+        top_n,
+        threshold,
+        chunk_cols,
+        rb,
+        timer_sample,
+    );
     for run in 0..runs {
-        let (row_nset, c_indices, c_data, total, ph) =
-            kernel_timed(&a_sub, &b, &tiled, top_n, threshold, chunk_cols, rb, timer_sample);
+        let (row_nset, c_indices, c_data, total, ph) = kernel_timed(
+            &a_sub,
+            &b,
+            &tiled,
+            top_n,
+            threshold,
+            chunk_cols,
+            rb,
+            timer_sample,
+        );
 
         // Bit-for-bit gelijk aan productie (zelfde accumulatievolgorde).
         let nset: Vec<u32> = prod
@@ -418,7 +448,10 @@ fn main() {
         assert_eq!(row_nset, nset, "row_nset wijkt af van productie");
         assert_eq!(c_indices, prod.indices, "indices wijken af van productie");
         assert!(
-            c_data.iter().zip(&prod.data).all(|(x, y)| x.to_bits() == y.to_bits()),
+            c_data
+                .iter()
+                .zip(&prod.data)
+                .all(|(x, y)| x.to_bits() == y.to_bits()),
             "data wijkt af van productie"
         );
 
@@ -441,11 +474,17 @@ fn main() {
         );
         println!(
             "  dense : scatter {:7.1} ms ({:4.1}%)  drain {:7.1} ms ({:4.1}%)",
-            sd * 1e3, pct(sd), dd * 1e3, pct(dd)
+            sd * 1e3,
+            pct(sd),
+            dd * 1e3,
+            pct(dd)
         );
         println!(
             "  linked: scatter {:7.1} ms ({:4.1}%)  drain {:7.1} ms ({:4.1}%)",
-            sl * 1e3, pct(sl), dl * 1e3, pct(dl)
+            sl * 1e3,
+            pct(sl),
+            dl * 1e3,
+            pct(dl)
         );
         println!("  sort+out: {:.1} ms ({:.1}%)", o * 1e3, pct(o));
         if run == 0 {

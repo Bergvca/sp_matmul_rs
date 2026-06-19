@@ -5,6 +5,7 @@
 //!   - geforceerde projectie (BinarySearch vs Cursor),
 //!   - O2 rij-blocking (row_block-sweep),
 //!   - O3 tiled CSR (tile_b), en de combinatie.
+//!
 //! Elke variant moet bit-for-bit gelijk zijn aan base.
 //!
 //! Run: cargo run --release --example sg_ab
@@ -142,7 +143,10 @@ fn check_equal(base: &CsrMatrix<f64, i32>, c: &CsrMatrix<f64, i32>, name: &str) 
     assert_eq!(base.indptr, c.indptr, "{name}: indptr wijkt af");
     assert_eq!(base.indices, c.indices, "{name}: indices wijken af");
     assert!(
-        base.data.iter().zip(&c.data).all(|(x, y)| x.to_bits() == y.to_bits()),
+        base.data
+            .iter()
+            .zip(&c.data)
+            .all(|(x, y)| x.to_bits() == y.to_bits()),
         "{name}: data wijkt af"
     );
 }
@@ -157,11 +161,18 @@ fn main() {
 
     let b = load("B", usize::MAX); // ncols volgt uit A
     let a = load("A", b.nrows);
-    let b = CsrMatrix { ncols: a.nrows, ..b };
+    let b = CsrMatrix {
+        ncols: a.nrows,
+        ..b
+    };
     println!(
         "A {}x{} nnz {} | B {}x{} nnz {}",
-        a.nrows, a.ncols, a.indptr.last().unwrap(),
-        b.nrows, b.ncols, b.indptr.last().unwrap()
+        a.nrows,
+        a.ncols,
+        a.indptr.last().unwrap(),
+        b.nrows,
+        b.ncols,
+        b.indptr.last().unwrap()
     );
 
     let chunk_cols = default_chunk_cols::<f64>().min(b.ncols);
@@ -201,7 +212,10 @@ fn main() {
 
     // row_block 0 = klassieke kernel; de productie-default (auto) kiest sinds
     // de O3+O2-port zelf het tiled+blocked pad op deze vorm.
-    let classic_opts = TopNOptions { row_block: Some(0), ..base_opts };
+    let classic_opts = TopNOptions {
+        row_block: Some(0),
+        ..base_opts
+    };
     let mut variants: Vec<(String, TopNOptions<f64>)> = vec![
         ("base (klassiek)".into(), classic_opts),
         ("auto (productie)".into(), base_opts),
@@ -209,11 +223,17 @@ fn main() {
     if !skip_o2 {
         variants.push((
             "proj=BinarySearch".into(),
-            TopNOptions { projection: Some(BProjection::BinarySearch), ..base_opts },
+            TopNOptions {
+                projection: Some(BProjection::BinarySearch),
+                ..base_opts
+            },
         ));
         variants.push((
             "proj=Cursor".into(),
-            TopNOptions { projection: Some(BProjection::Cursor), ..base_opts },
+            TopNOptions {
+                projection: Some(BProjection::Cursor),
+                ..base_opts
+            },
         ));
         for rb in [8usize, 32, 64, 256] {
             variants.push((
@@ -235,13 +255,20 @@ fn main() {
         }
         variants.push((
             "O3 tiled rb=1".into(),
-            TopNOptions { tile_b: true, ..base_opts },
+            TopNOptions {
+                tile_b: true,
+                ..base_opts
+            },
         ));
     }
     for &rb in &tiled_rbs {
         variants.push((
             format!("O3+O2 tiled rb={rb}"),
-            TopNOptions { tile_b: true, row_block: Some(rb), ..base_opts },
+            TopNOptions {
+                tile_b: true,
+                row_block: Some(rb),
+                ..base_opts
+            },
         ));
     }
 
@@ -283,11 +310,17 @@ fn main() {
         let mut mt_variants: Vec<(String, TopNOptions<f64>)> = vec![
             (
                 "base (klassiek)".into(),
-                TopNOptions { n_threads: Some(nt), ..classic_opts },
+                TopNOptions {
+                    n_threads: Some(nt),
+                    ..classic_opts
+                },
             ),
             (
                 "auto (productie)".into(),
-                TopNOptions { n_threads: Some(nt), ..base_opts },
+                TopNOptions {
+                    n_threads: Some(nt),
+                    ..base_opts
+                },
             ),
         ];
         for &rb in &tiled_rbs {

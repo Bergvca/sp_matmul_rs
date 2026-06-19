@@ -9,12 +9,12 @@
 #![deny(rust_2018_idioms)]
 #![warn(missing_debug_implementations)]
 
+pub mod chunked;
 pub mod csr;
 pub mod index;
-pub mod maxheap;
 pub mod matmul;
 pub mod matmul_topn;
-pub mod chunked;
+pub mod maxheap;
 pub mod scalar;
 pub mod tiled;
 pub mod zip;
@@ -26,12 +26,12 @@ pub mod parallel;
 pub mod python;
 
 pub use crate::chunked::{default_chunk_cols, sp_matmul_topn_chunked, AccumMode, BProjection};
-pub use crate::tiled::TiledB;
 pub use crate::csr::{CsrMatrix, CsrView};
 pub use crate::index::Index;
 pub use crate::matmul::sp_matmul;
 pub use crate::matmul_topn::{sp_matmul_topn, SortMode, TopNOptions};
 pub use crate::scalar::Scalar;
+pub use crate::tiled::TiledB;
 pub use crate::zip::zip_sp_matmul_topn;
 
 #[doc(hidden)]

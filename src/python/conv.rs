@@ -75,8 +75,5 @@ where
     let data = m.data.into_pyarray(py);
     let indices = m.indices.into_pyarray(py);
     let indptr = m.indptr.into_pyarray(py);
-    PyTuple::new(
-        py,
-        [data.into_any(), indices.into_any(), indptr.into_any()],
-    )
+    PyTuple::new(py, [data.into_any(), indices.into_any(), indptr.into_any()])
 }

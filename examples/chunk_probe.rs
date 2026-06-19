@@ -74,7 +74,10 @@ fn time_it(label: &str, a: &CsrMatrix<f64, i32>, b: &CsrMatrix<f64, i32>, opts: 
 }
 
 fn main() {
-    println!("default_chunk_cols::<f64>() = {}", sp_matmul_rs::default_chunk_cols::<f64>());
+    println!(
+        "default_chunk_cols::<f64>() = {}",
+        sp_matmul_rs::default_chunk_cols::<f64>()
+    );
 
     // Notebook shape: 1% density -> 100 nnz/row in A, 200 nnz/row in B.
     let a = build_csr(0xA1A1, 20_000, 10_000, 100);

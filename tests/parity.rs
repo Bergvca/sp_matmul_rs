@@ -44,7 +44,13 @@ where
         ..Default::default()
     };
     let got = sp_matmul_topn(a, b, case.top_n, opts);
-    assert_csr_equivalent(&got, &case.expected_indptr, &case.expected_indices, &case.expected_data, case.expected_shape);
+    assert_csr_equivalent(
+        &got,
+        &case.expected_indptr,
+        &case.expected_indices,
+        &case.expected_data,
+        case.expected_shape,
+    );
 }
 
 fn run_zip_case<V, I>(name: &str, v: &str, i: &str)
@@ -59,7 +65,13 @@ where
         .map(|c| CsrView::new(c.shape.0, c.shape.1, &c.indptr, &c.indices, &c.data).unwrap())
         .collect();
     let got = zip_sp_matmul_topn(case.top_n, &views);
-    assert_csr_equivalent(&got, &case.expected_indptr, &case.expected_indices, &case.expected_data, case.expected_shape);
+    assert_csr_equivalent(
+        &got,
+        &case.expected_indptr,
+        &case.expected_indices,
+        &case.expected_data,
+        case.expected_shape,
+    );
 }
 
 // Generate one #[test] per (case, V, I) combination.

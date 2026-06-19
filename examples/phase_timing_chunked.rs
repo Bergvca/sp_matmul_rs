@@ -290,14 +290,44 @@ fn main() {
     let a_nb = build_csr(0xA1A1, 20_000, 10_000, 100);
     let b_nb = build_csr(0xB2B2, 10_000, 20_000, 200);
     println!("== notebook shape, dense accum (production path) ==");
-    report("notebook dense", &a_nb, &b_nb, top_n, chunk_cols, Proj::BinarySearch, true, 1, 3);
+    report(
+        "notebook dense",
+        &a_nb,
+        &b_nb,
+        top_n,
+        chunk_cols,
+        Proj::BinarySearch,
+        true,
+        1,
+        3,
+    );
     println!("== notebook shape, linked-list accum (old path, reference) ==");
-    report("notebook linked", &a_nb, &b_nb, top_n, chunk_cols, Proj::BinarySearch, false, 1, 3);
+    report(
+        "notebook linked",
+        &a_nb,
+        &b_nb,
+        top_n,
+        chunk_cols,
+        Proj::BinarySearch,
+        false,
+        1,
+        3,
+    );
 
     // TF-IDF shape: Cursor + linked list (adaptive picks linked at d=0.00032).
     // Sampled timing: 1 in 16 rows carries timers.
     let a_tf = build_csr(0xAAAA, 20_000, 50_000, 8);
     let b_tf = build_csr(0xBBBB, 50_000, 200_000, 8);
     println!("== TF-IDF shape, linked-list accum (production path), sampled 1/16 ==");
-    report("tfidf linked", &a_tf, &b_tf, top_n, chunk_cols, Proj::Cursor, false, 16, 3);
+    report(
+        "tfidf linked",
+        &a_tf,
+        &b_tf,
+        top_n,
+        chunk_cols,
+        Proj::Cursor,
+        false,
+        16,
+        3,
+    );
 }

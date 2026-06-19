@@ -7,9 +7,6 @@ use std::time::Instant;
 use sp_matmul_rs::maxheap::MaxHeap;
 use sp_matmul_rs::CsrMatrix;
 
-const UNVISITED: usize = usize::MAX;
-const HEAD_NIL: usize = usize::MAX - 1;
-
 struct SplitMix64 {
     state: u64,
 }
@@ -141,7 +138,7 @@ fn kernel_timed(
 
 fn main() {
     let a = build_csr(0xA1A1, 20_000, 10_000, 100);
-    let b = build_csr(0xB2B2, 10_000, 200_00 * 1, 200);
+    let b = build_csr(0xB2B2, 10_000, 20_000, 200);
 
     // warmup
     let _ = kernel_timed(&a, &b, 10);

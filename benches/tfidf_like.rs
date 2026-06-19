@@ -155,20 +155,16 @@ fn ncols_sweep(c: &mut Criterion) {
     for &ncols in &[10_000usize, 100_000, 1_000_000] {
         let a = build_csr(0xF1F1 ^ ncols as u64, nrows_a, inner, 8);
         let b = build_csr(0xF2F2 ^ ncols as u64, inner, ncols, 8);
-        group.bench_with_input(
-            BenchmarkId::from_parameter(ncols),
-            &ncols,
-            |bencher, _| {
-                bencher.iter(|| {
-                    let opts = TopNOptions {
-                        sort: SortMode::ByValueDesc,
-                        chunk_cols: None, // default heuristic
-                        ..Default::default()
-                    };
-                    sp_matmul_topn_chunked(as_view(&a), as_view(&b), top_n, opts)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(ncols), &ncols, |bencher, _| {
+            bencher.iter(|| {
+                let opts = TopNOptions {
+                    sort: SortMode::ByValueDesc,
+                    chunk_cols: None, // default heuristic
+                    ..Default::default()
+                };
+                sp_matmul_topn_chunked(as_view(&a), as_view(&b), top_n, opts)
+            });
+        });
     }
     group.finish();
 }

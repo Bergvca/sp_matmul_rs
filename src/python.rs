@@ -43,7 +43,8 @@ fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyo3(name = "kernel_info")]
 fn py_kernel_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     use crate::chunked::{
-        default_chunk_cols, detect_l1d_bytes, DEFAULT_ROW_BLOCK, DENSE_MIN_DENSITY, FALLBACK_L1D_BYTES,
+        default_chunk_cols, detect_l1d_bytes, DEFAULT_ROW_BLOCK, DENSE_MIN_DENSITY,
+        FALLBACK_L1D_BYTES,
     };
 
     let detected = detect_l1d_bytes();
@@ -189,7 +190,11 @@ where
     };
     let opts = TopNOptions {
         threshold,
-        sort: if sort { SortMode::ByValueDesc } else { SortMode::ByColumn },
+        sort: if sort {
+            SortMode::ByValueDesc
+        } else {
+            SortMode::ByColumn
+        },
         density_hint: Some(density),
         chunk_cols,
         n_threads,

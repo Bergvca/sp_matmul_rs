@@ -1,12 +1,13 @@
+#![allow(clippy::needless_range_loop)]
 //! Fase A2 (simd_test_plan): ILP-headroom test on the production dense-chunk
 //! kernel (notebook shape, BinarySearch projection, dense accum).
 //!
 //! Variants:
 //! - base          — production dense scatter + scalar drain scan
 //! - unroll4       — scatter manually unrolled 4× (loads before stores; column
-//!                   indices within one B-row segment are strictly increasing,
-//!                   hence distinct, so the 4 iterations are independent).
-//!                   Simulates the memory-level parallelism SIMD could add.
+//!   indices within one B-row segment are strictly increasing,
+//!   hence distinct, so the 4 iterations are independent).
+//!   Simulates the memory-level parallelism SIMD could add.
 //! - prefetch      — O4: `prfm pldl1keep` on sums[k] 8 entries ahead
 //! - drainmax4     — drain scan grouped 4-way via max(): one branch per 4 slots
 //! - unroll4+dmax4 — both
@@ -288,15 +289,66 @@ fn bench(
 }
 
 fn main() {
-    let runs: usize = std::env::var("RUNS").ok().and_then(|s| s.parse().ok()).unwrap_or(7);
+    let runs: usize = std::env::var("RUNS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     let a = build_csr(0xA1A1, 20_000, 10_000, 100);
     let b = build_csr(0xB2B2, 10_000, 20_000, 200);
 
     println!("notebook shape, dense accum, BinarySearch projection, seq, median of {runs}");
-    let base = bench("base", &a, &b, ScatterKind::Base, DrainKind::Scan, runs, None);
-    bench("unroll4", &a, &b, ScatterKind::Unroll4, DrainKind::Scan, runs, Some(base));
-    bench("prefetch8", &a, &b, ScatterKind::Prefetch, DrainKind::Scan, runs, Some(base));
-    bench("drainmax4", &a, &b, ScatterKind::Base, DrainKind::Max4, runs, Some(base));
-    bench("unroll4+dmax4", &a, &b, ScatterKind::Unroll4, DrainKind::Max4, runs, Some(base));
-    bench("unr4+pf16+dmax4", &a, &b, ScatterKind::Unroll4Prefetch, DrainKind::Max4, runs, Some(base));
+    let base = bench(
+        "base",
+        &a,
+        &b,
+        ScatterKind::Base,
+        DrainKind::Scan,
+        runs,
+        None,
+    );
+    bench(
+        "unroll4",
+        &a,
+        &b,
+        ScatterKind::Unroll4,
+        DrainKind::Scan,
+        runs,
+        Some(base),
+    );
+    bench(
+        "prefetch8",
+        &a,
+        &b,
+        ScatterKind::Prefetch,
+        DrainKind::Scan,
+        runs,
+        Some(base),
+    );
+    bench(
+        "drainmax4",
+        &a,
+        &b,
+        ScatterKind::Base,
+        DrainKind::Max4,
+        runs,
+        Some(base),
+    );
+    bench(
+        "unroll4+dmax4",
+        &a,
+        &b,
+        ScatterKind::Unroll4,
+        DrainKind::Max4,
+        runs,
+        Some(base),
+    );
+    bench(
+        "unr4+pf16+dmax4",
+        &a,
+        &b,
+        ScatterKind::Unroll4Prefetch,
+        DrainKind::Max4,
+        runs,
+        Some(base),
+    );
 }

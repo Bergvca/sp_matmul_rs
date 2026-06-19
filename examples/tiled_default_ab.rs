@@ -7,9 +7,7 @@
 
 use std::time::Instant;
 
-use sp_matmul_rs::{
-    sp_matmul_topn, CsrMatrix, CsrView, SortMode, TopNOptions,
-};
+use sp_matmul_rs::{sp_matmul_topn, CsrMatrix, CsrView, SortMode, TopNOptions};
 
 struct SplitMix64 {
     state: u64,
@@ -95,7 +93,15 @@ fn bench(
     (out.unwrap(), median(times))
 }
 
-fn compare(name: &str, a: &CsrMatrix<f64, i32>, b: &CsrMatrix<f64, i32>, top_n: usize, runs: usize, rb: usize, nt: Option<usize>) {
+fn compare(
+    name: &str,
+    a: &CsrMatrix<f64, i32>,
+    b: &CsrMatrix<f64, i32>,
+    top_n: usize,
+    runs: usize,
+    rb: usize,
+    nt: Option<usize>,
+) {
     let base_opts = TopNOptions {
         sort: SortMode::ByValueDesc,
         n_threads: nt,
@@ -111,7 +117,10 @@ fn compare(name: &str, a: &CsrMatrix<f64, i32>, b: &CsrMatrix<f64, i32>, top_n: 
     assert_eq!(c0.indptr, c1.indptr, "{name}: indptr wijkt af");
     assert_eq!(c0.indices, c1.indices, "{name}: indices wijken af");
     assert!(
-        c0.data.iter().zip(&c1.data).all(|(x, y)| x.to_bits() == y.to_bits()),
+        c0.data
+            .iter()
+            .zip(&c1.data)
+            .all(|(x, y)| x.to_bits() == y.to_bits()),
         "{name}: data wijkt af"
     );
     println!(
@@ -129,7 +138,15 @@ fn main() {
     let a_nb = build_csr(42, 20_000, 10_000, 100);
     let b_nb = build_csr(43, 10_000, 20_000, 200);
     compare("notebook seq", &a_nb, &b_nb, 10, runs, rb, None);
-    compare(&format!("notebook nt={nt}"), &a_nb, &b_nb, 10, runs, rb, Some(nt));
+    compare(
+        &format!("notebook nt={nt}"),
+        &a_nb,
+        &b_nb,
+        10,
+        runs,
+        rb,
+        Some(nt),
+    );
 
     // Tiny vorm: build-overhead mag de kleine call niet domineren.
     let a_t = build_csr(44, 1_000, 500, 5);

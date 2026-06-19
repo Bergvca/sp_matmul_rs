@@ -50,10 +50,7 @@ fn read_scalar_bool(archive: &mut Archive, name: &str) -> bool {
     arr[0]
 }
 
-fn read_scalar_v<V: Scalar + npyz::Deserialize>(
-    archive: &mut Archive,
-    name: &str,
-) -> V {
+fn read_scalar_v<V: Scalar + npyz::Deserialize>(archive: &mut Archive, name: &str) -> V {
     let arr = read_array::<V>(archive, name);
     assert_eq!(arr.len(), 1, "scalar {name} must have len 1");
     arr[0]
@@ -95,7 +92,11 @@ where
     let sort_by_value_desc = read_scalar_bool(&mut archive, "sort_by_value_desc");
     let has_threshold = read_scalar_bool(&mut archive, "has_threshold");
     let threshold_val = read_scalar_v::<V>(&mut archive, "threshold");
-    let threshold = if has_threshold { Some(threshold_val) } else { None };
+    let threshold = if has_threshold {
+        Some(threshold_val)
+    } else {
+        None
+    };
     let expected_indptr = read_array::<I>(&mut archive, "expected_indptr");
     let expected_indices = read_array::<I>(&mut archive, "expected_indices");
     let expected_data = read_array::<V>(&mut archive, "expected_data");
@@ -150,7 +151,12 @@ where
         let indices = read_array::<I>(&mut archive, &format!("chunk_{k}_indices"));
         let data = read_array::<V>(&mut archive, &format!("chunk_{k}_data"));
         let shape = read_shape(&mut archive, &format!("chunk_{k}_shape"));
-        chunks.push(ZipChunk { indptr, indices, data, shape });
+        chunks.push(ZipChunk {
+            indptr,
+            indices,
+            data,
+            shape,
+        });
     }
     let expected_indptr = read_array::<I>(&mut archive, "expected_indptr");
     let expected_indices = read_array::<I>(&mut archive, "expected_indices");
@@ -187,7 +193,11 @@ pub fn assert_csr_equivalent<V, I>(
 {
     assert_eq!(got.nrows, expected_shape.0, "nrows mismatch");
     assert_eq!(got.ncols, expected_shape.1, "ncols mismatch");
-    assert_eq!(got.indptr.len(), expected_indptr.len(), "indptr length mismatch");
+    assert_eq!(
+        got.indptr.len(),
+        expected_indptr.len(),
+        "indptr length mismatch"
+    );
     for (k, (g, e)) in got.indptr.iter().zip(expected_indptr.iter()).enumerate() {
         assert_eq!(g.to_usize(), e.to_usize(), "indptr[{k}] differs");
     }
@@ -217,10 +227,7 @@ pub fn assert_csr_equivalent<V, I>(
                 .collect();
             got_vals.sort_unstable();
             exp_vals.sort_unstable();
-            assert_eq!(
-                got_vals, exp_vals,
-                "row {row}: value multiset differs",
-            );
+            assert_eq!(got_vals, exp_vals, "row {row}: value multiset differs",);
         } else {
             let mut got_row: Vec<(usize, V)> = (g_start..g_end)
                 .map(|k| (got.indices[k].to_usize(), got.data[k]))

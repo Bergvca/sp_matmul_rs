@@ -118,7 +118,13 @@ where
     let case: GoldenCase<V, I> = load_case(name, v, i);
     let ncols = case.b_shape.1.max(1);
     let widths: Vec<usize> = {
-        let mut w = vec![7usize, 64, 1024, ncols, ncols.saturating_mul(10).max(ncols + 1)];
+        let mut w = vec![
+            7usize,
+            64,
+            1024,
+            ncols,
+            ncols.saturating_mul(10).max(ncols + 1),
+        ];
         if SMALL_GOLDENS.contains(&name) {
             w.push(1);
         }

@@ -166,7 +166,11 @@ fn push_row_cursors<V: Scalar, I: Index>(
 /// (sum of B-row nnz over the row's entries) divided by `ncols`. O(nnz(A-row));
 /// the same `a.indices`/`b.indptr` reads happen again in the scatter, so this
 /// pre-pass is cache-warm by construction.
-fn row_update_density<V: Scalar, I: Index>(a: CsrView<'_, V, I>, b: CsrView<'_, V, I>, i: usize) -> f64 {
+fn row_update_density<V: Scalar, I: Index>(
+    a: CsrView<'_, V, I>,
+    b: CsrView<'_, V, I>,
+    i: usize,
+) -> f64 {
     let start = a.indptr[i].to_usize();
     let end = a.indptr[i + 1].to_usize();
     let mut updates: usize = 0;
@@ -233,7 +237,9 @@ pub fn sp_matmul_topn_chunked<V: Scalar, I: Index>(
     }
 
     let chunk_cols = resolve_chunk_cols::<V>(opts.chunk_cols, b.ncols);
-    let projection = opts.projection.unwrap_or_else(|| pick_projection(a, b, chunk_cols));
+    let projection = opts
+        .projection
+        .unwrap_or_else(|| pick_projection(a, b, chunk_cols));
     dispatch::<V, I>(a, b, top_n, opts, chunk_cols, projection)
 }
 
@@ -284,7 +290,10 @@ pub(crate) fn resolve_blocking<V: Scalar, I: Index>(
         // Explicit escape hatch: force the classic row-at-a-time kernel.
         (false, None)
     } else if opts.tile_b || opts.row_block.is_some() {
-        (opts.tile_b && TiledB::supports(&b, chunk_cols), opts.row_block)
+        (
+            opts.tile_b && TiledB::supports(&b, chunk_cols),
+            opts.row_block,
+        )
     } else if auto_tile(a, b, chunk_cols) {
         (true, Some(DEFAULT_ROW_BLOCK))
     } else {
@@ -558,7 +567,9 @@ impl<V: Scalar, I: Index> BlockScratch<V, I> {
         Self {
             sums: vec![V::default(); chunk_cols],
             next: vec![UNVISITED; chunk_cols],
-            heaps: (0..block_rows).map(|_| MaxHeap::new(top_n, threshold)).collect(),
+            heaps: (0..block_rows)
+                .map(|_| MaxHeap::new(top_n, threshold))
+                .collect(),
             mins: vec![V::default(); block_rows],
             use_dense: vec![false; block_rows],
             cursors: Vec::new(),
@@ -958,8 +969,8 @@ pub(crate) fn process_row<V: Scalar, I: Index>(
                     let cur = cursors[idx];
                     // Invariant: cur was advanced past prior chunk_end, so all
                     // remaining indices are >= c0.
-                    let seg_len = b.indices[cur..stop_b]
-                        .partition_point(|x| Index::to_usize(*x) < chunk_end);
+                    let seg_len =
+                        b.indices[cur..stop_b].partition_point(|x| Index::to_usize(*x) < chunk_end);
                     let m = scatter_dense_unrolled(
                         &b.indices[cur..cur + seg_len],
                         &b.data[cur..cur + seg_len],
@@ -1046,9 +1057,7 @@ mod tests {
             .map(|i| {
                 let s = c.indptr[i] as usize;
                 let e = c.indptr[i + 1] as usize;
-                let mut row: Vec<(i32, f64)> = (s..e)
-                    .map(|k| (c.indices[k], c.data[k]))
-                    .collect();
+                let mut row: Vec<(i32, f64)> = (s..e).map(|k| (c.indices[k], c.data[k])).collect();
                 row.sort_by_key(|(idx, _)| *idx);
                 row
             })
@@ -1057,6 +1066,7 @@ mod tests {
 
     /// For each strategy, run the chunked driver at the given width and return
     /// the row-sorted (idx, val) lists.
+    #[allow(clippy::type_complexity)]
     fn run_both(
         a: CsrView<'_, f64, i32>,
         b: CsrView<'_, f64, i32>,
@@ -1082,10 +1092,7 @@ mod tests {
         };
         let (bs, cu) = run_both(a, b, 2, opts, 4);
         // row 0 top-2: (3, 19) (2, 2); row 1 top-2: (3, 46) (2, 4)
-        let expected = vec![
-            vec![(2, 2.0), (3, 19.0)],
-            vec![(2, 4.0), (3, 46.0)],
-        ];
+        let expected = vec![vec![(2, 2.0), (3, 19.0)], vec![(2, 4.0), (3, 46.0)]];
         assert_eq!(bs, expected);
         assert_eq!(cu, expected);
     }
@@ -1272,9 +1279,16 @@ mod tests {
                         accum_mode,
                         ..Default::default()
                     };
-                    let dense = run::<f64, i32>(a, b, top_n, mk(AccumMode::Dense), chunk_cols, projection);
-                    let linked =
-                        run::<f64, i32>(a, b, top_n, mk(AccumMode::LinkedList), chunk_cols, projection);
+                    let dense =
+                        run::<f64, i32>(a, b, top_n, mk(AccumMode::Dense), chunk_cols, projection);
+                    let linked = run::<f64, i32>(
+                        a,
+                        b,
+                        top_n,
+                        mk(AccumMode::LinkedList),
+                        chunk_cols,
+                        projection,
+                    );
                     assert_eq!(
                         rows_sorted(&dense),
                         rows_sorted(&linked),
@@ -1352,8 +1366,8 @@ mod tests {
     #[test]
     fn pick_projection_extremes() {
         // Dense B (nnz ≈ nrows * ncols), few chunks → BinarySearch.
-        let dense_indptr: Vec<i32> = (0..=4).map(|i| (i * 8) as i32).collect();
-        let dense_indices: Vec<i32> = (0..32).map(|k| (k % 8) as i32).collect();
+        let dense_indptr: Vec<i32> = (0..=4).map(|i| i * 8).collect();
+        let dense_indices: Vec<i32> = (0..32).map(|k| k % 8).collect();
         let dense_data = vec![1.0f64; 32];
         let dense = CsrView::new(4, 8, &dense_indptr, &dense_indices, &dense_data).unwrap();
         let a_ip = vec![0i32, 1];
@@ -1413,7 +1427,10 @@ mod tests {
         let b = CsrView::new(4, 40, &b_ip, &b_idx, &b_d).unwrap();
 
         let auto = TopNOptions::<f64>::default();
-        assert_eq!(resolve_blocking(a, b, 8, &auto), (true, Some(DEFAULT_ROW_BLOCK)));
+        assert_eq!(
+            resolve_blocking(a, b, 8, &auto),
+            (true, Some(DEFAULT_ROW_BLOCK))
+        );
         let classic = TopNOptions::<f64> {
             row_block: Some(0),
             ..Default::default()
@@ -1421,9 +1438,24 @@ mod tests {
         assert_eq!(resolve_blocking(a, b, 8, &classic), (false, None));
 
         // Outputs of both paths agree bit-for-bit.
-        let c_auto = sp_matmul_topn_chunked(a, b, 3, TopNOptions { chunk_cols: Some(8), ..auto });
-        let c_classic =
-            sp_matmul_topn_chunked(a, b, 3, TopNOptions { chunk_cols: Some(8), ..classic });
+        let c_auto = sp_matmul_topn_chunked(
+            a,
+            b,
+            3,
+            TopNOptions {
+                chunk_cols: Some(8),
+                ..auto
+            },
+        );
+        let c_classic = sp_matmul_topn_chunked(
+            a,
+            b,
+            3,
+            TopNOptions {
+                chunk_cols: Some(8),
+                ..classic
+            },
+        );
         assert_eq!(c_auto.indptr, c_classic.indptr);
         assert_eq!(c_auto.indices, c_classic.indices);
         assert_eq!(c_auto.data, c_classic.data);

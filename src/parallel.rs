@@ -417,7 +417,10 @@ mod tests {
         assert!(Arc::ptr_eq(&p1, &p2), "same n_threads must share a pool");
         assert_eq!(p1.current_num_threads(), 3);
         let p3 = pool_for(2);
-        assert!(!Arc::ptr_eq(&p1, &p3), "distinct n_threads get distinct pools");
+        assert!(
+            !Arc::ptr_eq(&p1, &p3),
+            "distinct n_threads get distinct pools"
+        );
     }
 
     #[test]

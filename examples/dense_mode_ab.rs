@@ -120,7 +120,10 @@ fn section(
 }
 
 fn main() {
-    let runs: usize = std::env::var("RUNS").ok().and_then(|s| s.parse().ok()).unwrap_or(5);
+    let runs: usize = std::env::var("RUNS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5);
     let top_n = 10;
 
     // 1. Notebook shape: 20000×10000 · 10000×20000, ~1% dense, d = 100·200/20000 = 1.0.

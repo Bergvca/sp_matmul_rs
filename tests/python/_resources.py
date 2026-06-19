@@ -21,6 +21,14 @@ def _assert_array_equal(A, B, rtol=1e-5, atol=1e-8):
 
 
 def _assert_smat_equal(A, B, rtol=1e-5, atol=1e-8):
+    # Sparse output ordering within a row is not part of the contract — scipy
+    # 1.17's csr_matmul leaves indices unsorted, and our kernel may emit
+    # descending column order from its linked-list drain. Canonicalize both
+    # before structural comparison.
+    A = A.copy()
+    B = B.copy()
+    A.sort_indices()
+    B.sort_indices()
     _assert_array_equal(A.data, B.data, rtol, atol)
     assert_array_equal(A.indptr, B.indptr)
     assert_array_equal(A.indices, B.indices)

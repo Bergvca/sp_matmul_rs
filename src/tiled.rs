@@ -133,8 +133,7 @@ mod tests {
                 }
                 let s = ip[j] as usize;
                 let e = ip[j + 1] as usize;
-                let want: Vec<(usize, f64)> =
-                    (s..e).map(|kk| (ix[kk] as usize, d[kk])).collect();
+                let want: Vec<(usize, f64)> = (s..e).map(|kk| (ix[kk] as usize, d[kk])).collect();
                 assert_eq!(got, want, "chunk_cols={chunk_cols} row={j}");
             }
         }

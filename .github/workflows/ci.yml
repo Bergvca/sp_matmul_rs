@@ -39,7 +39,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --no-default-features
       - run: cargo test --features rayon
-      - run: cargo build --features python,rayon
+      # cargo check (not build) — building the cdylib requires linking against
+      # the host Python; the pytest job covers the full build via maturin.
+      - run: cargo check --features python,rayon --lib
 
   pytest:
     name: pytest (py${{ matrix.python }} ${{ matrix.os }})
@@ -56,11 +58,21 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - uses: Swatinem/rust-cache@v2
+      - name: Create virtualenv
+        run: python -m venv .venv
       - name: Install maturin and test deps
+        shell: bash
         run: |
+          if [ -f .venv/bin/activate ]; then source .venv/bin/activate; else source .venv/Scripts/activate; fi
           python -m pip install --upgrade pip
           python -m pip install maturin pytest numpy scipy psutil
       - name: Build & install extension
-        run: maturin develop --release --features python,rayon
+        shell: bash
+        run: |
+          if [ -f .venv/bin/activate ]; then source .venv/bin/activate; else source .venv/Scripts/activate; fi
+          maturin develop --release --features python,rayon
       - name: Run pytest
-        run: pytest tests/python -q
+        shell: bash
+        run: |
+          if [ -f .venv/bin/activate ]; then source .venv/bin/activate; else source .venv/Scripts/activate; fi
+          pytest tests/python -q

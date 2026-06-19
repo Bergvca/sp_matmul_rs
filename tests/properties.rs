@@ -1,4 +1,3 @@
-
 //! Property tests for sequential kernels — invariants checked without external goldens.
 //!
 //! Run on f64 × i32. The kernels are dtype-generic; correctness for other dtypes is
@@ -114,9 +113,13 @@ fn rows_as_maps(c: &CsrMatrix<f64, i32>) -> Vec<BTreeMap<i32, f64>> {
 }
 
 fn maps_close(a: &[BTreeMap<i32, f64>], b: &[BTreeMap<i32, f64>]) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     for (ra, rb) in a.iter().zip(b.iter()) {
-        if ra.len() != rb.len() { return false; }
+        if ra.len() != rb.len() {
+            return false;
+        }
         for (ka, va) in ra.iter() {
             match rb.get(ka) {
                 None => return false,

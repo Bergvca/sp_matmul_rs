@@ -147,7 +147,8 @@ macro_rules! dispatch_vi {
             }
             _ => ::std::result::Result::Err(::pyo3::exceptions::PyTypeError::new_err(format!(
                 "unsupported dtype combo: values={}, indices={}",
-                __a_data_dt.str()?, __a_indptr_dt.str()?
+                __a_data_dt.str()?,
+                __a_indptr_dt.str()?
             ))),
         }
     }};

@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop, clippy::neg_cmp_op_on_partial_ord)]
 //! O6 A/B: dense-drain-scan varianten op de echte string_grouper-dumps.
 //!
 //! De fasemeting (phase_timing_tiled.rs, 2026-06-12) gaf: dense drain = 47%
@@ -404,9 +405,13 @@ fn kernel(
                             Mode::Neon8 | Mode::CmaxNeon8 => {
                                 drain_scan_neon::<8>(&mut sums, chunk_width, c0, min, &mut heaps[r])
                             }
-                            Mode::Neon16 => {
-                                drain_scan_neon::<16>(&mut sums, chunk_width, c0, min, &mut heaps[r])
-                            }
+                            Mode::Neon16 => drain_scan_neon::<16>(
+                                &mut sums,
+                                chunk_width,
+                                c0,
+                                min,
+                                &mut heaps[r],
+                            ),
                         };
                     }
                 } else {
@@ -467,11 +472,18 @@ fn main() {
 
     let b = load("B", usize::MAX);
     let a = load("A", b.nrows);
-    let b = CsrMatrix { ncols: a.nrows, ..b };
+    let b = CsrMatrix {
+        ncols: a.nrows,
+        ..b
+    };
     println!(
         "A {}x{} nnz {} | B {}x{} nnz {}",
-        a.nrows, a.ncols, a.indptr.last().unwrap(),
-        b.nrows, b.ncols, b.indptr.last().unwrap()
+        a.nrows,
+        a.ncols,
+        a.indptr.last().unwrap(),
+        b.nrows,
+        b.ncols,
+        b.indptr.last().unwrap()
     );
 
     let ncols = b.ncols;
@@ -537,7 +549,10 @@ fn main() {
         assert_eq!(row_nset, prod_nset, "{name}: row_nset wijkt af");
         assert_eq!(c_indices, prod.indices, "{name}: indices wijken af");
         assert!(
-            c_data.iter().zip(&prod.data).all(|(x, y)| x.to_bits() == y.to_bits()),
+            c_data
+                .iter()
+                .zip(&prod.data)
+                .all(|(x, y)| x.to_bits() == y.to_bits()),
             "{name}: data wijkt af"
         );
 
@@ -553,7 +568,10 @@ fn main() {
             base_ms = ms;
         }
         let skip = if mode.track_max() {
-            format!("{:.1}%", 100.0 * ctr.skipped as f64 / ctr.dense_chunks.max(1) as f64)
+            format!(
+                "{:.1}%",
+                100.0 * ctr.skipped as f64 / ctr.dense_chunks.max(1) as f64
+            )
         } else {
             "-".into()
         };

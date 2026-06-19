@@ -99,9 +99,8 @@ impl<V: Scalar, I: Index> MaxHeap<V, I> {
     /// Sort by value descending — largest score first in the output row.
     /// Invalidates the heap; caller must `reset` before reuse.
     pub fn sort_by_value_desc(&mut self) {
-        self.heap.sort_by(|a, b| {
-            b.val.partial_cmp(&a.val).unwrap_or(Ordering::Equal)
-        });
+        self.heap
+            .sort_by(|a, b| b.val.partial_cmp(&a.val).unwrap_or(Ordering::Equal));
     }
 
     pub fn entries(&self) -> &[Score<V, I>] {
