@@ -88,12 +88,19 @@ enum DrainKind {
 #[inline(always)]
 fn prefetch_sums(sums: &[f64], k: usize) {
     if k < sums.len() {
+        #[cfg(target_arch = "aarch64")]
         unsafe {
             std::arch::asm!(
                 "prfm pldl1keep, [{0}]",
                 in(reg) sums.as_ptr().add(k),
                 options(nostack, preserves_flags, readonly)
             );
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            // Non-aarch64: no portable prefetch intrinsic worth using here.
+            // The Prefetch variant becomes a no-op on this target.
+            let _ = sums.as_ptr();
         }
     }
 }
