@@ -4,11 +4,14 @@
 [![PyPI](https://img.shields.io/pypi/v/sp_matmul_rs.svg)](https://pypi.org/project/sp_matmul_rs/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**sp\_matmul\_rs** provides a fast way to perform a sparse matrix multiplication followed by top-n multiplication result selection.
+**sp\_matmul\_rs** provides a fast way to perform a sparse matrix multiplication (SpGEMM) followed by top-n multiplication result selection.
 
 It is a Rust port of [**sparse\_dot\_topn**](https://github.com/ing-bank/sparse_dot_topn), created and optimised for use in [**string\_grouper**](https://github.com/Bergvca/string_grouper) — where the dominant workload is matching every row of a very large TF-IDF matrix against every other row and keeping only the top-n nearest neighbours.
 
-**sp\_matmul\_rs** is built around L1/L2 cache-blocking: the default driver column-chunks `B` so the dense per-row accumulator and the streamed `B` fragments stay resident in L1, which is the dominant performance lever once the working set stops fitting in cache.
+**sparse_dot_topn** is based on  [Gustavson's algorithm](https://www.researchgate.net/figure/Gustavson-algorithm-Sparse-matrix-matrix-multiplication-is-performed-in-a-row-wise_fig4_327077990) 
+ but retains only the best _n_ values per output row. **sp\_matmul\_rs** retains the same algorithmic core 
+but is built around L1/L2 cache-blocking: the default driver column-chunks `B` so the dense per-row 
+accumulator and the streamed `B` fragments stay resident in L1 (chunk sizes are automatically calculated based on cache size), which is the dominant performance lever once the working set stops fitting in cache.
 Parallelism is provided by `rayon` (enabled by default) and the Python distribution releases the GIL around the kernel.
 On Apple M5 Pro over a 663k × 193k TF-IDF self-similarity workload **sp\_matmul\_rs** runs in as little as 41% of the time of **sparse\_dot\_topn** when retaining the top 10 values per row and utilising 10 cores.
 See the benchmark directory for details.
