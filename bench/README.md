@@ -76,6 +76,13 @@ when slower, matching richbench's sign convention.
 
 ## Results
 
+x86-64 validation numbers (chunk_cols sweeps, FMA/AVX2 build flags, end-to-end
+`string_grouper` attribution on an Intel i7-6500U) live in
+[`results_x86_i7-6500U.md`](results_x86_i7-6500U.md). Note that the cached
+`tfidf_*.npz` matrices here are word-level TF-IDF (~3.4 nnz/row) — much sparser
+than the trigram matrices `string_grouper` actually produces (~18 nnz/row); the
+x86-64 file benchmarks both.
+
 ### Apple Macbook Pro | M5 Pro | 48 GB RAM | macOS 26.4
 
 `scipy 1.17.1`, `sparse_dot_topn 1.2.0` (OpenMP via Homebrew libomp 22.1.8),

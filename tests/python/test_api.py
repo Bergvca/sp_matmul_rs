@@ -79,6 +79,27 @@ def test_sp_matmul_topn_nthreads(rng, dtype):
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64])
+def test_sp_matmul_topn_chunk_cols(rng, dtype):
+    A = sparse.random(100, 10, density=0.5, format="csr", dtype=dtype, random_state=rng)
+    B = sparse.random(10, 100, density=0.5, format="csr", dtype=dtype, random_state=rng)
+    C_ref = sp_matmul_topn(A, B, top_n=10)
+    for chunk_cols in (1, 7, 64, B.shape[1], 10 * B.shape[1]):
+        C = sp_matmul_topn(A, B, top_n=10, chunk_cols=chunk_cols)
+        _assert_smat_equal(C, C_ref)
+    with pytest.raises(ValueError, match="chunk_cols"):
+        sp_matmul_topn(A, B, top_n=10, chunk_cols=0)
+
+
+def test_sp_matmul_topn_chunk_cols_env(rng, monkeypatch):
+    A = sparse.random(100, 10, density=0.5, format="csr", dtype=np.float64, random_state=rng)
+    B = sparse.random(10, 100, density=0.5, format="csr", dtype=np.float64, random_state=rng)
+    C_ref = sp_matmul_topn(A, B, top_n=10)
+    monkeypatch.setenv("SP_MATMUL_RS_CHUNK_COLS", "64")
+    C = sp_matmul_topn(A, B, top_n=10)
+    _assert_smat_equal(C, C_ref)
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32, np.int64])
 def test_sp_matmul_topn_sorted(rng, dtype):
     A = sparse.random(100, 10, density=0.5, format="csr", dtype=dtype, random_state=rng)
     B = sparse.random(10, 100, density=0.5, format="csr", dtype=dtype, random_state=rng)

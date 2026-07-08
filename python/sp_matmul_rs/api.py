@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import warnings
 from typing import TYPE_CHECKING
 
@@ -114,6 +115,7 @@ def sp_matmul_topn(
     density: float | None = None,
     n_threads: int | None = None,
     idx_dtype: DTypeLike | None = None,
+    chunk_cols: int | None = None,
 ) -> csr_matrix:
     """Compute A * B whilst only storing the `top_n` elements per row.
 
@@ -135,6 +137,11 @@ def sp_matmul_topn(
         n_threads: number of threads to use, `None` implies sequential processing, -1 will use all
             but one of the available cores.
         idx_dtype: dtype to use for the indices, defaults to 32-bit integers.
+        chunk_cols: column-chunk width of the cache-blocked kernel. `None` (default) derives it
+            from the detected L1d cache size (see ``kernel_info()['default_chunk_cols']``); the
+            environment variable ``SP_MATMUL_RS_CHUNK_COLS`` overrides the derived default when
+            this argument is `None`. The optimum is workload-dependent: denser B rows can favour
+            widths above the L1d-derived default. Any value yields identical results.
 
     Throws:
         TypeError: when A, B are not trivially convertable to a `CSR matrix`.
@@ -147,6 +154,13 @@ def sp_matmul_topn(
         n_threads = _N_CORES
     density: float = density or 1.0
     idx_dtype = assert_idx_dtype(idx_dtype)
+    if chunk_cols is None:
+        env_chunk_cols = os.environ.get("SP_MATMUL_RS_CHUNK_COLS")
+        if env_chunk_cols:
+            chunk_cols = int(env_chunk_cols)
+    if chunk_cols is not None and chunk_cols < 1:
+        msg = f"`chunk_cols` must be >= 1 or None, got {chunk_cols}"
+        raise ValueError(msg)
 
     if isinstance(A, csc_matrix) and isinstance(B, csc_matrix) and A.shape[0] == B.shape[1]:
         A = A.transpose()
@@ -206,6 +220,7 @@ def sp_matmul_topn(
         "threshold": threshold,
         "density": density,
         "sort": sort,
+        "chunk_cols": chunk_cols,
         "n_threads": n_threads if n_threads and n_threads > 1 else None,
         "A_data": A.data,
         "A_indptr": A.indptr if idx_dtype is None else A.indptr.astype(idx_dtype),
