@@ -378,6 +378,20 @@ pub(crate) fn run<V: Scalar, I: Index>(
     }
 }
 
+/// `v * x + acc` through either [`Scalar::mul_add`] (baseline: honours the
+/// crate's compile-time feature set) or [`Scalar::mul_add_fused`] (the
+/// `FMA = true` monomorphizations, reachable only through the AVX2+FMA kernel
+/// clones — see [`process_row`] / [`process_row_block`]). The branch folds at
+/// monomorphization.
+#[inline(always)]
+fn fmadd<V: Scalar, const FMA: bool>(v: V, x: V, acc: V) -> V {
+    if FMA {
+        v.mul_add_fused(x, acc)
+    } else {
+        v.mul_add(x, acc)
+    }
+}
+
 /// Scatter one B-row segment into `sums`, manually unrolled 4×. Column
 /// indices within a segment are strictly increasing, hence distinct, so the
 /// four load/fma/store groups are independent: the loads issue before the
@@ -394,7 +408,7 @@ pub(crate) fn run<V: Scalar, I: Index>(
 /// ~99% skip rate on thresholded TF-IDF shapes).
 /// Float `max` ignores NaN, which matches the drain: NaN sums never push.
 #[inline(always)]
-fn scatter_dense_unrolled<V: Scalar, I: Index>(
+fn scatter_dense_unrolled<V: Scalar, I: Index, const FMA: bool>(
     seg_idx: &[I],
     seg_dat: &[V],
     v: V,
@@ -412,10 +426,10 @@ fn scatter_dense_unrolled<V: Scalar, I: Index>(
         let k1 = seg_idx[s + 1].to_usize() - c0;
         let k2 = seg_idx[s + 2].to_usize() - c0;
         let k3 = seg_idx[s + 3].to_usize() - c0;
-        let n0 = v.mul_add(seg_dat[s], sums[k0]);
-        let n1 = v.mul_add(seg_dat[s + 1], sums[k1]);
-        let n2 = v.mul_add(seg_dat[s + 2], sums[k2]);
-        let n3 = v.mul_add(seg_dat[s + 3], sums[k3]);
+        let n0 = fmadd::<V, FMA>(v, seg_dat[s], sums[k0]);
+        let n1 = fmadd::<V, FMA>(v, seg_dat[s + 1], sums[k1]);
+        let n2 = fmadd::<V, FMA>(v, seg_dat[s + 2], sums[k2]);
+        let n3 = fmadd::<V, FMA>(v, seg_dat[s + 3], sums[k3]);
         sums[k0] = n0;
         sums[k1] = n1;
         sums[k2] = n2;
@@ -428,7 +442,7 @@ fn scatter_dense_unrolled<V: Scalar, I: Index>(
     }
     for t in s..n {
         let k_local = seg_idx[t].to_usize() - c0;
-        let nv = v.mul_add(seg_dat[t], sums[k_local]);
+        let nv = fmadd::<V, FMA>(v, seg_dat[t], sums[k_local]);
         sums[k_local] = nv;
         m0 = m0.max(nv);
     }
@@ -439,7 +453,7 @@ fn scatter_dense_unrolled<V: Scalar, I: Index>(
 /// no `c0` rebase. Same independence argument — indices within a segment are
 /// strictly increasing — and the same returned max-of-written-sums.
 #[inline(always)]
-fn scatter_dense_unrolled_local<V: Scalar>(
+fn scatter_dense_unrolled_local<V: Scalar, const FMA: bool>(
     seg_idx: &[u16],
     seg_dat: &[V],
     v: V,
@@ -456,10 +470,10 @@ fn scatter_dense_unrolled_local<V: Scalar>(
         let k1 = seg_idx[s + 1] as usize;
         let k2 = seg_idx[s + 2] as usize;
         let k3 = seg_idx[s + 3] as usize;
-        let n0 = v.mul_add(seg_dat[s], sums[k0]);
-        let n1 = v.mul_add(seg_dat[s + 1], sums[k1]);
-        let n2 = v.mul_add(seg_dat[s + 2], sums[k2]);
-        let n3 = v.mul_add(seg_dat[s + 3], sums[k3]);
+        let n0 = fmadd::<V, FMA>(v, seg_dat[s], sums[k0]);
+        let n1 = fmadd::<V, FMA>(v, seg_dat[s + 1], sums[k1]);
+        let n2 = fmadd::<V, FMA>(v, seg_dat[s + 2], sums[k2]);
+        let n3 = fmadd::<V, FMA>(v, seg_dat[s + 3], sums[k3]);
         sums[k0] = n0;
         sums[k1] = n1;
         sums[k2] = n2;
@@ -472,7 +486,7 @@ fn scatter_dense_unrolled_local<V: Scalar>(
     }
     for t in s..n {
         let k_local = seg_idx[t] as usize;
-        let nv = v.mul_add(seg_dat[t], sums[k_local]);
+        let nv = fmadd::<V, FMA>(v, seg_dat[t], sums[k_local]);
         sums[k_local] = nv;
         m0 = m0.max(nv);
     }
@@ -585,8 +599,110 @@ impl<V: Scalar, I: Index> BlockScratch<V, I> {
 ///
 /// Per-row accumulation order is identical to [`process_row`], so output is
 /// bit-for-bit identical for every block size.
+///
+/// On x86-64 builds without compile-time FMA this dispatches once, per cached
+/// CPUID detection, to an `#[target_feature(enable = "avx2,fma")]` clone of
+/// the same body (fused multiply-add plus AVX2 codegen for the inlined
+/// scatters, drains and sorts). Elsewhere it is exactly the baseline body.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn process_row_block<V: Scalar, I: Index>(
+    a: CsrView<'_, V, I>,
+    b: CsrView<'_, V, I>,
+    row_lo: usize,
+    row_hi: usize,
+    sort: SortMode,
+    chunk_cols: usize,
+    projection: BProjection,
+    accum: AccumMode,
+    tiled: Option<&TiledB<V>>,
+    scratch: &mut BlockScratch<V, I>,
+    out_indices: &mut Vec<I>,
+    out_data: &mut Vec<V>,
+    row_nset: &mut Vec<u32>,
+) {
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "fma")))]
+    if crate::simd::avx2_fma_enabled() {
+        // SAFETY: `avx2_fma_enabled` returns true only after runtime CPUID
+        // detection of both `avx2` and `fma`.
+        return unsafe {
+            process_row_block_avx2(
+                a,
+                b,
+                row_lo,
+                row_hi,
+                sort,
+                chunk_cols,
+                projection,
+                accum,
+                tiled,
+                scratch,
+                out_indices,
+                out_data,
+                row_nset,
+            )
+        };
+    }
+    process_row_block_impl::<V, I, false>(
+        a,
+        b,
+        row_lo,
+        row_hi,
+        sort,
+        chunk_cols,
+        projection,
+        accum,
+        tiled,
+        scratch,
+        out_indices,
+        out_data,
+        row_nset,
+    )
+}
+
+/// AVX2+FMA clone of [`process_row_block`]. The `#[inline(always)]` impl body
+/// inlines here and is compiled with the extended feature set.
+///
+/// # Safety
+/// The CPU must support AVX2 and FMA (guaranteed by the caller's
+/// `simd::avx2_fma_enabled` check).
+#[cfg(all(target_arch = "x86_64", not(target_feature = "fma")))]
+#[target_feature(enable = "avx2,fma")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn process_row_block_avx2<V: Scalar, I: Index>(
+    a: CsrView<'_, V, I>,
+    b: CsrView<'_, V, I>,
+    row_lo: usize,
+    row_hi: usize,
+    sort: SortMode,
+    chunk_cols: usize,
+    projection: BProjection,
+    accum: AccumMode,
+    tiled: Option<&TiledB<V>>,
+    scratch: &mut BlockScratch<V, I>,
+    out_indices: &mut Vec<I>,
+    out_data: &mut Vec<V>,
+    row_nset: &mut Vec<u32>,
+) {
+    process_row_block_impl::<V, I, true>(
+        a,
+        b,
+        row_lo,
+        row_hi,
+        sort,
+        chunk_cols,
+        projection,
+        accum,
+        tiled,
+        scratch,
+        out_indices,
+        out_data,
+        row_nset,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn process_row_block_impl<V: Scalar, I: Index, const FMA: bool>(
     a: CsrView<'_, V, I>,
     b: CsrView<'_, V, I>,
     row_lo: usize,
@@ -650,7 +766,7 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                     for jj in a_row_start..a_row_end {
                         let j = a.indices[jj].to_usize();
                         let (si, sd) = t.segment(chunk_id, j);
-                        let m = scatter_dense_unrolled_local(si, sd, a.data[jj], sums);
+                        let m = scatter_dense_unrolled_local::<V, FMA>(si, sd, a.data[jj], sums);
                         chunk_max = chunk_max.max(m);
                     }
                 } else {
@@ -660,7 +776,7 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                         let (si, sd) = t.segment(chunk_id, j);
                         for (p, &kl) in si.iter().enumerate() {
                             let k_local = kl as usize;
-                            sums[k_local] = v.mul_add(sd[p], sums[k_local]);
+                            sums[k_local] = fmadd::<V, FMA>(v, sd[p], sums[k_local]);
                             if next[k_local] == UNVISITED {
                                 next[k_local] = head;
                                 head = k_local as u32;
@@ -683,7 +799,8 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                             for (slot, &k_idx) in row_b_idx[lo..hi].iter().enumerate() {
                                 let off = lo + slot;
                                 let k_local = k_idx.to_usize() - c0;
-                                sums[k_local] = v.mul_add(b.data[row_start + off], sums[k_local]);
+                                sums[k_local] =
+                                    fmadd::<V, FMA>(v, b.data[row_start + off], sums[k_local]);
                                 if next[k_local] == UNVISITED {
                                     next[k_local] = head;
                                     head = k_local as u32;
@@ -701,7 +818,7 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                             let row_b_idx = &b.indices[row_start..row_end];
                             let lo = row_b_idx.partition_point(|x| Index::to_usize(*x) < c0);
                             let hi = row_b_idx.partition_point(|x| Index::to_usize(*x) < chunk_end);
-                            let m = scatter_dense_unrolled(
+                            let m = scatter_dense_unrolled::<V, I, FMA>(
                                 &row_b_idx[lo..hi],
                                 &b.data[row_start + lo..row_start + hi],
                                 v,
@@ -725,7 +842,7 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                                 }
                                 debug_assert!(k >= c0);
                                 let k_local = k - c0;
-                                sums[k_local] = v.mul_add(b.data[cur], sums[k_local]);
+                                sums[k_local] = fmadd::<V, FMA>(v, b.data[cur], sums[k_local]);
                                 if next[k_local] == UNVISITED {
                                     next[k_local] = head;
                                     head = k_local as u32;
@@ -745,7 +862,7 @@ pub(crate) fn process_row_block<V: Scalar, I: Index>(
                             let cur = scratch.cursors[base + idx];
                             let seg_len = b.indices[cur..stop_b]
                                 .partition_point(|x| Index::to_usize(*x) < chunk_end);
-                            let m = scatter_dense_unrolled(
+                            let m = scatter_dense_unrolled::<V, I, FMA>(
                                 &b.indices[cur..cur + seg_len],
                                 &b.data[cur..cur + seg_len],
                                 v,
@@ -853,8 +970,108 @@ pub(crate) fn run_blocked<V: Scalar, I: Index>(
 /// `out_data`. Returns the number of entries appended.
 ///
 /// Shared between [`run`] (sequential) and `parallel::run_row_slice`.
+///
+/// On x86-64 builds without compile-time FMA this dispatches once, per cached
+/// CPUID detection, to an `#[target_feature(enable = "avx2,fma")]` clone of
+/// the same body — see [`process_row_block`] for the pattern.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn process_row<V: Scalar, I: Index>(
+    a: CsrView<'_, V, I>,
+    b: CsrView<'_, V, I>,
+    i: usize,
+    sort: SortMode,
+    chunk_cols: usize,
+    projection: BProjection,
+    accum: AccumMode,
+    sums: &mut [V],
+    next: &mut [u32],
+    heap: &mut MaxHeap<V, I>,
+    cursors: &mut Vec<usize>,
+    out_indices: &mut Vec<I>,
+    out_data: &mut Vec<V>,
+) -> usize {
+    #[cfg(all(target_arch = "x86_64", not(target_feature = "fma")))]
+    if crate::simd::avx2_fma_enabled() {
+        // SAFETY: `avx2_fma_enabled` returns true only after runtime CPUID
+        // detection of both `avx2` and `fma`.
+        return unsafe {
+            process_row_avx2(
+                a,
+                b,
+                i,
+                sort,
+                chunk_cols,
+                projection,
+                accum,
+                sums,
+                next,
+                heap,
+                cursors,
+                out_indices,
+                out_data,
+            )
+        };
+    }
+    process_row_impl::<V, I, false>(
+        a,
+        b,
+        i,
+        sort,
+        chunk_cols,
+        projection,
+        accum,
+        sums,
+        next,
+        heap,
+        cursors,
+        out_indices,
+        out_data,
+    )
+}
+
+/// AVX2+FMA clone of [`process_row`].
+///
+/// # Safety
+/// The CPU must support AVX2 and FMA (guaranteed by the caller's
+/// `simd::avx2_fma_enabled` check).
+#[cfg(all(target_arch = "x86_64", not(target_feature = "fma")))]
+#[target_feature(enable = "avx2,fma")]
+#[allow(clippy::too_many_arguments)]
+unsafe fn process_row_avx2<V: Scalar, I: Index>(
+    a: CsrView<'_, V, I>,
+    b: CsrView<'_, V, I>,
+    i: usize,
+    sort: SortMode,
+    chunk_cols: usize,
+    projection: BProjection,
+    accum: AccumMode,
+    sums: &mut [V],
+    next: &mut [u32],
+    heap: &mut MaxHeap<V, I>,
+    cursors: &mut Vec<usize>,
+    out_indices: &mut Vec<I>,
+    out_data: &mut Vec<V>,
+) -> usize {
+    process_row_impl::<V, I, true>(
+        a,
+        b,
+        i,
+        sort,
+        chunk_cols,
+        projection,
+        accum,
+        sums,
+        next,
+        heap,
+        cursors,
+        out_indices,
+        out_data,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn process_row_impl<V: Scalar, I: Index, const FMA: bool>(
     a: CsrView<'_, V, I>,
     b: CsrView<'_, V, I>,
     i: usize,
@@ -908,7 +1125,7 @@ pub(crate) fn process_row<V: Scalar, I: Index>(
                     for (slot, &k_idx) in row_b_idx[lo..hi].iter().enumerate() {
                         let off = lo + slot;
                         let k_local = k_idx.to_usize() - c0;
-                        sums[k_local] = v.mul_add(b.data[row_start + off], sums[k_local]);
+                        sums[k_local] = fmadd::<V, FMA>(v, b.data[row_start + off], sums[k_local]);
                         if next[k_local] == UNVISITED {
                             next[k_local] = head;
                             head = k_local as u32;
@@ -926,7 +1143,7 @@ pub(crate) fn process_row<V: Scalar, I: Index>(
                     let row_b_idx = &b.indices[row_start..row_end];
                     let lo = row_b_idx.partition_point(|x| Index::to_usize(*x) < c0);
                     let hi = row_b_idx.partition_point(|x| Index::to_usize(*x) < chunk_end);
-                    let m = scatter_dense_unrolled(
+                    let m = scatter_dense_unrolled::<V, I, FMA>(
                         &row_b_idx[lo..hi],
                         &b.data[row_start + lo..row_start + hi],
                         v,
@@ -950,7 +1167,7 @@ pub(crate) fn process_row<V: Scalar, I: Index>(
                         // Invariant: cur was advanced past prior chunk_end, so k >= c0.
                         debug_assert!(k >= c0);
                         let k_local = k - c0;
-                        sums[k_local] = v.mul_add(b.data[cur], sums[k_local]);
+                        sums[k_local] = fmadd::<V, FMA>(v, b.data[cur], sums[k_local]);
                         if next[k_local] == UNVISITED {
                             next[k_local] = head;
                             head = k_local as u32;
@@ -971,7 +1188,7 @@ pub(crate) fn process_row<V: Scalar, I: Index>(
                     // remaining indices are >= c0.
                     let seg_len =
                         b.indices[cur..stop_b].partition_point(|x| Index::to_usize(*x) < chunk_end);
-                    let m = scatter_dense_unrolled(
+                    let m = scatter_dense_unrolled::<V, I, FMA>(
                         &b.indices[cur..cur + seg_len],
                         &b.data[cur..cur + seg_len],
                         v,

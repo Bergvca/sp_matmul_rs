@@ -35,6 +35,17 @@ pub trait Scalar:
     /// `std`'s `mul_add` becomes a libm call), use separate multiply + add.
     fn mul_add(self, b: Self, acc: Self) -> Self;
 
+    /// `self * b + acc`, always requesting the fused form for floats
+    /// (`llvm.fma`, single rounding) regardless of the crate's compile-time
+    /// `target_feature` set. Only call this from a `#[target_feature]` context
+    /// that enables `fma` (the runtime-dispatch kernel clones); anywhere else
+    /// it degrades to a correct but slow libm call on non-FMA baselines. Ints
+    /// fall back to [`Scalar::mul_add`].
+    #[inline(always)]
+    fn mul_add_fused(self, b: Self, acc: Self) -> Self {
+        self.mul_add(b, acc)
+    }
+
     /// Branchless maximum. Floats use `fN::max` (lowers to `fmax`; returns the
     /// non-NaN operand if one side is NaN), ints `Ord::max`. Used to group the
     /// dense drain scan four-wide with a single heap-threshold branch.
@@ -88,6 +99,10 @@ macro_rules! impl_scalar_float {
                 {
                     self * b + acc
                 }
+            }
+            #[inline(always)]
+            fn mul_add_fused(self, b: Self, acc: Self) -> Self {
+                <$t>::mul_add(self, b, acc)
             }
             #[inline(always)]
             fn max(self, other: Self) -> Self {

@@ -139,6 +139,22 @@ maturin develop --release --features python,rayon
 python -c "import sp_matmul_rs; print(sp_matmul_rs.kernel_info())"
 ```
 
+### x86-64: FMA/AVX2 via runtime dispatch
+
+Baseline x86-64 builds (including the PyPI wheels) cannot assume FMA/AVX2 at compile time, so
+the chunked kernels ship AVX2+FMA clones selected by runtime CPU detection — worth **~17–18 %**
+on real string-matching workloads, and available on effectively every x86-64 CPU since 2013
+(Haswell/Zen). No configuration needed; check which path is active with
+`sp_matmul_rs.kernel_info()['runtime_simd']` (`"avx2+fma"`, `"baseline"`, or `"compile-time"`),
+and set `SP_MATMUL_RS_FORCE_BASELINE=1` to disable the clones for A/B measurements.
+
+Building from source with `RUSTFLAGS="-C target-cpu=native"` still applies the full native
+feature set (including AVX-512 where present — the runtime dispatch tier is AVX2+FMA only) to
+the whole crate and compiles the dispatch machinery away; on AVX2-class hardware it measures
+the same as the runtime-dispatched wheel. See
+[`bench/results_x86_i7-6500U.md`](bench/results_x86_i7-6500U.md) for x86-64 numbers and the
+`chunk_cols` / `SP_MATMUL_RS_CHUNK_COLS` tuning knob.
+
 ## Benchmarks
 
 `bench/bench_rust_vs_cpp_scipy.py` is a three-way comparison against the upstream C++ extension (`sparse_dot_topn`) and `scipy.sparse` on a word-level TF-IDF matrix over the EDGAR company-name corpus ([Kaggle: dattapiy/sec-edgar-companies-list](https://www.kaggle.com/datasets/dattapiy/sec-edgar-companies-list)).
