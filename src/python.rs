@@ -63,6 +63,7 @@ fn py_kernel_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     info.set_item("default_row_block", DEFAULT_ROW_BLOCK)?;
     info.set_item("dense_min_density", DENSE_MIN_DENSITY)?;
     info.set_item("parallel_enabled", cfg!(feature = "rayon"))?;
+    info.set_item("runtime_simd", crate::simd::runtime_simd_label())?;
     Ok(info)
 }
 

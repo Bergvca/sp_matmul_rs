@@ -16,6 +16,7 @@ pub mod matmul;
 pub mod matmul_topn;
 pub mod maxheap;
 pub mod scalar;
+pub mod simd;
 pub mod tiled;
 pub mod zip;
 
@@ -36,3 +37,5 @@ pub use crate::zip::zip_sp_matmul_topn;
 
 #[doc(hidden)]
 pub use crate::matmul_topn::sp_matmul_topn_unchunked_for_tests;
+#[doc(hidden)]
+pub use crate::simd::force_simd_baseline_for_tests;
