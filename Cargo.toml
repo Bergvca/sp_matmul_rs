@@ -1,6 +1,6 @@
 [package]
 name         = "sp_matmul_rs"
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2021"
 rust-version = "1.75"
 license      = "Apache-2.0"
@@ -17,6 +17,7 @@ exclude      = [
     ".idea/*",
     "target/*",
     "tests/data/*",
+    "bench/*.npz",
     "**/__pycache__/*",
     "python/sp_matmul_rs/_core.*.so",
     "python/sp_matmul_rs/_core.*.pyd",
