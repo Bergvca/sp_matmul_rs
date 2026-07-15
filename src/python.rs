@@ -25,6 +25,31 @@ use crate::matmul_topn::{SortMode, TopNOptions};
 use crate::scalar::Scalar;
 use conv::{borrow_csr_view, csr_to_py_tuple, indptr_nrows};
 
+/// Run a kernel with the GIL released, mapping index-overflow panics from the
+/// drivers (see `csr::narrow_indptr`) to Python `OverflowError`. Any other
+/// panic resumes unwinding and surfaces as `PanicException`, as before.
+fn detach_mapping_overflow<T, F>(py: Python<'_>, f: F) -> PyResult<T>
+where
+    F: FnOnce() -> T + Send,
+    T: Send,
+{
+    let result = py.detach(move || std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
+    result.or_else(|payload| {
+        let msg = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied());
+        match msg {
+            Some(m) if m.contains(crate::csr::INDEX_OVERFLOW_MARKER) => {
+                Err(pyo3::exceptions::PyOverflowError::new_err(format!(
+                    "{m}; pass idx_dtype=np.int64 or split the inputs"
+                )))
+            }
+            _ => std::panic::resume_unwind(payload),
+        }
+    })
+}
+
 #[pymodule]
 fn _core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_sp_matmul, m)?)?;
@@ -119,7 +144,7 @@ where
     // Sequential `sp_matmul` ignores n_threads; the wrapper short-circuits to
     // this binding only when n_threads <= 1, so we don't need to dispatch.
     let _ = n_threads;
-    let c: CsrMatrix<V, I> = py.detach(|| crate::sp_matmul(a, b));
+    let c: CsrMatrix<V, I> = detach_mapping_overflow(py, || crate::sp_matmul(a, b))?;
     csr_to_py_tuple(py, c)
 }
 
@@ -201,7 +226,8 @@ where
         n_threads,
         ..Default::default()
     };
-    let c: CsrMatrix<V, I> = py.detach(|| crate::sp_matmul_topn(a, b, top_n, opts));
+    let c: CsrMatrix<V, I> =
+        detach_mapping_overflow(py, || crate::sp_matmul_topn(a, b, top_n, opts))?;
     csr_to_py_tuple(py, c)
 }
 
@@ -286,6 +312,7 @@ where
         chunks.push(view);
     }
 
-    let c: CsrMatrix<V, I> = py.detach(|| crate::zip_sp_matmul_topn(top_n, &chunks));
+    let c: CsrMatrix<V, I> =
+        detach_mapping_overflow(py, || crate::zip_sp_matmul_topn(top_n, &chunks))?;
     csr_to_py_tuple(py, c)
 }

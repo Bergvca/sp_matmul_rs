@@ -24,7 +24,7 @@ use rayon::prelude::*;
 use crate::chunked::{
     self, process_row, process_row_block, resolve_chunk_cols, BProjection, BlockScratch, UNVISITED,
 };
-use crate::csr::{matmul_topn_short_circuit, CsrMatrix, CsrView};
+use crate::csr::{matmul_topn_short_circuit, narrow_indptr, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::matmul_topn::TopNOptions;
 use crate::maxheap::MaxHeap;
@@ -214,7 +214,7 @@ fn build_csr_from_blocks<V: Scalar, I: Index>(
     for block in blocks {
         for &n in &block.row_nset {
             running += n as usize;
-            indptr.push(I::from_usize(running));
+            indptr.push(narrow_indptr(running));
         }
         indices.extend(block.indices);
         data.extend(block.data);

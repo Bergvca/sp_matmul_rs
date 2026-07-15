@@ -6,7 +6,7 @@
 //! intended for the chunk-invariance test as an independent oracle.
 
 use crate::chunked::{sp_matmul_topn_chunked, AccumMode, BProjection};
-use crate::csr::{matmul_topn_short_circuit, CsrMatrix, CsrView};
+use crate::csr::{matmul_topn_short_circuit, narrow_indptr, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::matmul::sp_matmul;
 use crate::maxheap::MaxHeap;
@@ -80,6 +80,12 @@ impl<V: Scalar> Default for TopNOptions<V> {
     }
 }
 
+/// # Panics
+///
+/// Panics if the output non-zero count exceeds [`Index::max_usize`] for `I`
+/// (e.g. more than `i32::MAX` non-zeros with `i32` indices). The drivers check
+/// the running total as each row is finalised, so the run aborts as soon as
+/// overflow becomes certain.
 pub fn sp_matmul_topn<V: Scalar, I: Index>(
     a: CsrView<'_, V, I>,
     b: CsrView<'_, V, I>,
@@ -215,7 +221,7 @@ pub fn sp_matmul_topn_unchunked_for_tests<V: Scalar, I: Index>(
             c_data.push(entry.val);
         }
         nnz_total += n_set;
-        c_indptr.push(I::from_usize(nnz_total));
+        c_indptr.push(narrow_indptr(nnz_total));
     }
 
     CsrMatrix {

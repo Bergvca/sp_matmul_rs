@@ -5,11 +5,16 @@
 //! in-process column-chunked driver in `chunked.rs` does the same thing via a
 //! streaming merge and is the preferred single-node path.
 
-use crate::csr::{CsrMatrix, CsrView};
+use crate::csr::{check_index_capacity, narrow_indptr, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::maxheap::MaxHeap;
 use crate::scalar::Scalar;
 
+/// # Panics
+///
+/// Panics if the zipped output cannot be represented with index type `I`:
+/// either the total column count across chunks exceeds [`Index::max_usize`]
+/// (checked up front, before any work), or the output non-zero count does.
 pub fn zip_sp_matmul_topn<V: Scalar, I: Index>(
     top_n: usize,
     c_chunks: &[CsrView<'_, V, I>],
@@ -36,6 +41,13 @@ pub fn zip_sp_matmul_topn<V: Scalar, I: Index>(
         acc += chunk.ncols;
     }
     let total_ncols = acc;
+
+    // Output column indices are synthesized as chunk offset + local index, so
+    // the zipped width must fit `I` up front — otherwise the `chunk_offset`
+    // narrowing below wraps (or the addition overflows in debug builds) mid-run.
+    if let Err(e) = check_index_capacity::<I>(0, total_ncols) {
+        panic!("{e}");
+    }
 
     if top_n == 0 {
         return CsrMatrix::zeros(nrows, total_ncols);
@@ -78,7 +90,7 @@ pub fn zip_sp_matmul_topn<V: Scalar, I: Index>(
             data.push(entry.val);
         }
         nnz_total += n_set;
-        indptr.push(I::from_usize(nnz_total));
+        indptr.push(narrow_indptr(nnz_total));
     }
 
     CsrMatrix {
@@ -112,6 +124,19 @@ mod tests {
         assert_eq!(c.nrows, 2);
         assert_eq!(c.ncols, 3);
         assert_eq!(c.nnz(), 0);
+    }
+
+    /// A zipped width past `i32::MAX` must abort up front: the synthesized
+    /// column offsets cannot be represented, so proceeding would wrap them.
+    #[test]
+    #[should_panic(expected = "exceeds the maximum value representable")]
+    fn zipped_width_past_index_max_panics() {
+        let indptr = vec![0i32, 1];
+        let indices = vec![0i32];
+        let data = vec![1.0f64];
+        let wide = CsrView::new(1, i32::MAX as usize, &indptr, &indices, &data).unwrap();
+        let narrow = CsrView::new(1, 2, &indptr, &indices, &data).unwrap();
+        zip_sp_matmul_topn(1, &[wide, narrow]);
     }
 
     /// Two chunks side by side. Each row has two nnz total, top_n=2 keeps both,

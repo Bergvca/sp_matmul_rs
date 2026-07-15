@@ -7,14 +7,24 @@
 //! columns. The intra-row column order in the output is the reverse linked-list walk
 //! order — *not* sorted. Scipy and our parity tests handle this by sorting indices
 //! before comparison.
+//!
+//! Deliberate divergence from the C++ original: sums that cancel to exactly zero
+//! are kept as explicit zeros (as scipy does), because pass 1 counts every touched
+//! column. The C++ fill pass drops them while its size pass counts them, which
+//! desynchronises `indptr` from `indices`/`data` on any exact cancellation.
 
-use crate::csr::{CsrMatrix, CsrView};
+use crate::csr::{narrow_indptr, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::scalar::Scalar;
 
 const UNVISITED: usize = usize::MAX;
 const HEAD_NIL: usize = usize::MAX - 1;
 
+/// # Panics
+///
+/// Panics if the output non-zero count exceeds [`Index::max_usize`] for `I`
+/// (e.g. more than `i32::MAX` non-zeros with `i32` indices). The check runs in
+/// the size pass, before the output is allocated.
 pub fn sp_matmul<V: Scalar, I: Index>(
     a: CsrView<'_, V, I>,
     b: CsrView<'_, V, I>,
@@ -57,7 +67,7 @@ pub fn sp_matmul<V: Scalar, I: Index>(
             }
         }
         nnz_total += row_nnz;
-        c_indptr.push(I::from_usize(nnz_total));
+        c_indptr.push(narrow_indptr(nnz_total));
     }
 
     // Pass 2 — fill indices and data via dense accumulator + linked list.
@@ -88,11 +98,15 @@ pub fn sp_matmul<V: Scalar, I: Index>(
             }
         }
 
+        // Push every touched column, including sums that cancelled to exactly
+        // zero — pass 1 counted them, so dropping them here would desynchronise
+        // indptr from indices/data (the legacy C++ kernel has exactly that bug:
+        // its size pass counts touched columns while its fill pass skips zero
+        // sums, corrupting the row boundaries). Keeping explicit zeros matches
+        // scipy's csr_matmat and the top-n kernels' no-threshold behaviour.
         for _ in 0..length {
-            if sums[head] != V::default() {
-                c_indices.push(I::from_usize(head));
-                c_data.push(sums[head]);
-            }
+            c_indices.push(I::from_usize(head));
+            c_data.push(sums[head]);
             let temp = head;
             head = next[head];
             next[temp] = UNVISITED;
@@ -144,6 +158,29 @@ mod tests {
         row0_sorted.sort_by_key(|(idx, _)| *idx);
         assert_eq!(row0_sorted, vec![(0, 3.0), (1, 2.0)]);
         assert_eq!(row1, vec![(1, 3.0)]);
+    }
+
+    /// Exact cancellation must keep the entry as an explicit zero so indptr
+    /// (sized from touched columns in pass 1) stays consistent with the data.
+    /// A = [[1, -1]], B = [[1], [1]] → C = [[0]] with one stored zero.
+    #[test]
+    fn exact_cancellation_keeps_explicit_zero() {
+        let a_indptr: Vec<i32> = vec![0, 2];
+        let a_indices: Vec<i32> = vec![0, 1];
+        let a_data: Vec<f64> = vec![1.0, -1.0];
+        let b_indptr: Vec<i32> = vec![0, 1, 2];
+        let b_indices: Vec<i32> = vec![0, 0];
+        let b_data: Vec<f64> = vec![1.0, 1.0];
+
+        let a = CsrView::new(1, 2, &a_indptr, &a_indices, &a_data).unwrap();
+        let b = CsrView::new(2, 1, &b_indptr, &b_indices, &b_data).unwrap();
+        let c = sp_matmul(a, b);
+
+        assert_eq!(c.indptr, vec![0, 1]);
+        assert_eq!(c.indices, vec![0]);
+        assert_eq!(c.data, vec![0.0]);
+        // The invariant the overflow guard and scipy both rely on:
+        assert_eq!(c.indptr[c.nrows] as usize, c.nnz());
     }
 
     #[test]

@@ -8,7 +8,7 @@ use numpy::{IntoPyArray, PyArray1, PyArrayMethods, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
-use crate::csr::{CsrMatrix, CsrView};
+use crate::csr::{check_index_capacity, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::scalar::Scalar;
 
@@ -72,6 +72,18 @@ where
     V: Scalar + numpy::Element,
     I: Index + numpy::Element,
 {
+    // Backstop: the drivers abort on nnz overflow as it happens
+    // (`csr::narrow_indptr`, mapped to OverflowError by
+    // `python::detach_mapping_overflow`). Re-checking here also covers the
+    // declared column width, which only the zip driver validates itself.
+    // `m.nnz()` / `m.ncols` are plain usize sizes, unaffected by any index
+    // truncation.
+    check_index_capacity::<I>(m.nnz(), m.ncols).map_err(|e| {
+        pyo3::exceptions::PyOverflowError::new_err(format!(
+            "{e}; pass idx_dtype=np.int64 or split the inputs"
+        ))
+    })?;
+
     let data = m.data.into_pyarray(py);
     let indices = m.indices.into_pyarray(py);
     let indptr = m.indptr.into_pyarray(py);

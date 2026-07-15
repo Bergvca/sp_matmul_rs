@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Index overflow now fails loudly instead of silently truncating. The kernels
+  narrow offsets to the index dtype with an unchecked cast, so a result whose
+  non-zero count exceeded `idx_dtype`'s range (`i32::MAX` for the default
+  `int32`) previously returned a corrupted `indptr` (wrapped/negative values)
+  with no warning. The drivers now check the running non-zero total as each
+  row is finalised and abort the moment overflow becomes certain — a panic in
+  the Rust API, mapped to `OverflowError` (with a message pointing to
+  `idx_dtype=np.int64`) in the Python bindings. `zip_sp_matmul_topn`
+  additionally validates the total zipped column width up front, before any
+  work. Added `Index::max_usize()` (provided method, non-breaking) and
+  `csr::check_index_capacity()` to support the checks.
+- `sp_matmul` no longer desynchronises `indptr` from `indices`/`data` when a
+  dot product cancels to exactly zero. The size pass counts every touched
+  column, but the fill pass skipped exact-zero sums — a bug inherited from the
+  C++ original (`sp_matmul.hpp` has the same mismatch), where any exact
+  cancellation shifted all subsequent entries out of alignment with the row
+  boundaries. Cancelled entries are now stored as explicit zeros, matching
+  scipy's `csr_matmat` and the top-n kernels' no-threshold behaviour.
+
 ## [0.2.0] — 2026-07-09
 
 Added optimisations for x86-64 CPU's based on FMA/AVX2

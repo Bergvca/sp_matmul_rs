@@ -17,7 +17,7 @@
 
 use std::cmp::Ordering;
 
-use crate::csr::{matmul_topn_short_circuit, CsrMatrix, CsrView};
+use crate::csr::{matmul_topn_short_circuit, narrow_indptr, CsrMatrix, CsrView};
 use crate::index::Index;
 use crate::matmul_topn::{SortMode, TopNOptions};
 use crate::maxheap::MaxHeap;
@@ -366,7 +366,7 @@ pub(crate) fn run<V: Scalar, I: Index>(
             &mut c_data,
         );
         nnz_total += n_set;
-        c_indptr.push(I::from_usize(nnz_total));
+        c_indptr.push(narrow_indptr(nnz_total));
     }
 
     CsrMatrix {
@@ -953,7 +953,7 @@ pub(crate) fn run_blocked<V: Scalar, I: Index>(
     let mut running: usize = 0;
     for &n in &row_nset {
         running += n as usize;
-        c_indptr.push(I::from_usize(running));
+        c_indptr.push(narrow_indptr(running));
     }
 
     CsrMatrix {
