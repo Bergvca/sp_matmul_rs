@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-07-15
+
 ### Fixed
 - Index overflow now fails loudly instead of silently truncating. The kernels
   narrow offsets to the index dtype with an unchecked cast, so a result whose
